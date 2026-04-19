@@ -60,6 +60,8 @@ public class OuterTransactionService {
      * If inner fails:
      * → Rolls back to savepoint
      * → Outer can still commit remaining work
+     * 
+     * If Outer fails → everything rolls back including inner
      */
     @Transactional
     public void testNested() {

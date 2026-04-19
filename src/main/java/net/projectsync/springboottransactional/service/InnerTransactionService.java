@@ -70,6 +70,8 @@ public class InnerTransactionService {
      * If exception occurs:
      * - Rolls back only nested part
      * - Outer transaction can still commit
+     * 
+     * If Outer fails → everything rolls back including inner
      */
     @Transactional(propagation = Propagation.NESTED)
     public void nested() {
