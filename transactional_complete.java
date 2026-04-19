@@ -547,3 +547,93 @@ public class OrderService {
 // SERIALIZABLE     | all 3 problems (slowest)
 
 
+
+
+// -- What happens to Rollback when we have GlobalExceptionHandler (Start) ---//
+/*
+Case 1: RuntimeException occurs and is NOT caught inside method
+
+@Transactional
+public void save() {
+    repo.save(a);
+    throw new RuntimeException("failed");
+}
+
+Result:
+- Transaction rolls back
+- Data is not saved
+- Global exception handler catches exception later
+*/
+
+
+/*
+Case 2: RuntimeException occurs and IS caught inside method
+
+@Transactional
+public void save() {
+    repo.save(a);
+
+    try {
+        throw new RuntimeException("failed");
+    } catch (Exception e) {
+        log.error("error");
+    }
+}
+
+Result:
+- Transaction commits
+- repo.save(a) remains in DB
+- Because exception never went outside method
+*/
+
+
+/*
+Case 3: RuntimeException occurs, caught and rethrown
+
+@Transactional
+public void save() {
+    repo.save(a);
+
+    try {
+        throw new RuntimeException("failed");
+    } catch (Exception e) {
+        throw e;
+    }
+}
+
+Result:
+- Transaction rolls back
+- Data is not saved
+- Global exception handler catches exception
+*/
+
+
+/*
+Case 4: RuntimeException occurs, caught but rollback manually marked
+
+@Transactional
+public void save() {
+    repo.save(a);
+
+    try {
+        throw new RuntimeException("failed");
+    } catch (Exception e) {
+        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+    }
+}
+
+Result:
+- Transaction rolls back
+- Data is not saved
+- Method may still return normally
+*/
+
+
+/*
+Global exception handler does NOT control rollback.
+
+Rollback decision happens inside transactional proxy
+before controller advice / exception handler executes.
+*/
+
+//-- What happens to Rollback when we have GlobalExceptionHandler (End) ---//
