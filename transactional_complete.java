@@ -59,7 +59,39 @@ public class OrderService {
     // WRITE OPERATIONS — override with @Transactional (readOnly=false by default)
     // =========================================================
 
-    @Transactional
+    /*
+     * Spring Data JPA repositories (like orderRepository) already have @Transactional on methods like save().
+     *
+     * So:
+     * - save() runs inside its own transaction
+     * - it will commit immediately after execution
+     *
+     * Problem without service-level @Transactional:
+     * 		public Order createOrder(Order order) {
+     *   		orderRepository.save(order);   			// save() → commits ✅
+     *   		paymentService.process(order); 			// process() fails ❌   -> Your system is now in inconsistent state
+     * 		}
+     *   → leads to inconsistent state
+     *
+     * Solution:
+     * - Use @Transactional at service layer
+     * - Entire method runs in ONE transaction
+     * - Any failure → full rollback ✅
+     * - ❌ Don’t rely on repository-level transactions
+     * - ✅ Always use @Transactional in service layer
+     * 
+     * Ex:
+     *     @Transactional
+     *     public Order createOrder(Order order) {
+     *     		return orderRepository.save(order);
+     *     }
+     *	
+     *     Entire method = single transaction
+     *     If anything fails → everything rolls back
+     *
+     */
+    
+    @Transactional		// MANDATORY for 'Create' operation as well
     // Overrides class-level readOnly=true
     // readOnly is false by default here, so Hibernate WILL:
     //   → track entity changes (dirty checking ON)
@@ -95,7 +127,7 @@ public class OrderService {
     public void processOrder(Long id) throws Exception {
         Order order = orderRepository.findById(id).orElseThrow();
         order.setStatus("PROCESSING");
-        // If RuntimeException thrown here → ROLLBACK ✅
+        // If RuntimeException thrown here  → ROLLBACK ✅
         // If IOException thrown here       → NO rollback ❌ (checked exception)
     }
 
@@ -130,7 +162,17 @@ public class OrderService {
         }
     }
 
-
+    @Transactional(timeout = 5)
+    // Rolls back if this method doesn't complete within 5 seconds
+    // Throws TransactionTimedOutException
+    // Default is -1 (no timeout)
+    // USE CASE: prevent long-running transactions from locking DB rows
+    public void timeoutExample(Long id) {
+        Order order = orderRepository.findById(id).orElseThrow();
+        slowExternalCall(); // if this takes > 5s → rollback
+        orderRepository.save(order);
+    }
+    
     // =========================================================
     // PROPAGATION — how transactions behave when methods call each other
     // =========================================================
@@ -219,9 +261,11 @@ public class OrderService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    // → ALWAYS creates a BRAND NEW transaction
+    // → ALWAYS creates a BRAND NEW independent transaction
     // → Suspends the existing transaction while this runs
     // → This method's rollback does NOT affect the caller's transaction
+    //   If caller transaction fails → this audit log STILL commits 	✅
+    //   If THIS method fails 		 → only this transaction rolls back ❌ (caller unaffected)
     // USE CASE: audit logging — save the log even if main operation fails
     public void saveAuditLog(String message) {
         auditRepository.save(new AuditLog(message));
@@ -230,6 +274,7 @@ public class OrderService {
 
     @Transactional(propagation = Propagation.NESTED)
     // → Creates a SAVEPOINT inside the existing transaction
+    //   Runs inside the SAME physical transaction (no new transaction)
     // → If this method fails → rollback to savepoint (caller can continue)
     // → If caller fails → everything rolls back including this
     // Requires JDBC savepoint support (PostgreSQL, MySQL support it)
@@ -248,10 +293,21 @@ public class OrderService {
         return orderRepository.findById(id).orElseThrow();
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    // → Always runs WITHOUT a transaction
+    // → If a transaction exists: suspends it, runs without, then resumes
+    // USE CASE: batch processing or operations that perform better without txn
+    public void bulkExport() {
+        // Runs outside any transaction context
+    }
+    
     @Transactional(propagation = Propagation.MANDATORY)
     // → MUST be called within an existing transaction
-    // → Throws IllegalTransactionStateException if no transaction exists
-    // USE CASE: enforce that this method is never called standalone
+    // → If no transaction exists → IllegalTransactionStateException ❌
+    //   Joins the caller's transaction (same transaction context)
+    //   No new transaction is created
+    // USE CASE: Enforces that transaction is controlled by the caller (usually a higher-level service)
+    //  		 Prevents accidental execution without a transaction
     // Both caller and called method will use same transaction if present
     public void validateAndSave(Order order) {
         // Caller MUST have started a transaction before calling this
@@ -264,14 +320,6 @@ public class OrderService {
     // USE CASE: operations that should never run inside a transaction (e.g., DDL)
     public void runDDLOperation() {
         // Will throw if called from inside a @Transactional method
-    }
-
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    // → Always runs WITHOUT a transaction
-    // → If a transaction exists: suspends it, runs without, then resumes
-    // USE CASE: batch processing or operations that perform better without txn
-    public void bulkExport() {
-        // Runs outside any transaction context
     }
 
 
@@ -342,23 +390,6 @@ public class OrderService {
     public void processFinancialTransaction(Order order) {
         orderRepository.save(order);
     }
-
-
-    // =========================================================
-    // TIMEOUT — rollback if method takes too long
-    // =========================================================
-
-    @Transactional(timeout = 5)
-    // Rolls back if this method doesn't complete within 5 seconds
-    // Throws TransactionTimedOutException
-    // Default is -1 (no timeout)
-    // USE CASE: prevent long-running transactions from locking DB rows
-    public void timeoutExample(Long id) {
-        Order order = orderRepository.findById(id).orElseThrow();
-        slowExternalCall(); // if this takes > 5s → rollback
-        orderRepository.save(order);
-    }
-
 
     // =========================================================
     // ⚠️ GOTCHAS SUMMARY (in code)

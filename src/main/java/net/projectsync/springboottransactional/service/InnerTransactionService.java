@@ -7,6 +7,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/*
+| Propagation      | Same Transaction?          | If Caller Fails                       | If Callee Fails                       | If BOTH Fail                  | Partial Commit Possible? |
+| ---------------- | -------------------------- | ------------------------------------- | ------------------------------------- | ----------------------------- | ------------------------ |
+| **REQUIRED**     | Yes                        | Entire transaction rolls back         | Entire transaction rolls back         | Entire transaction rolls back | No                       |
+| **REQUIRES_NEW** | No (separate transactions) | Only caller transaction rolls back    | Only callee transaction rolls back    | Both roll back independently  | Yes                      |
+| **NESTED**       | Yes (with savepoint)       | Entire transaction rolls back         | Rolls back to savepoint               | Entire transaction rolls back | Yes (if handled)         |
+| **MANDATORY**    | Yes (must exist)           | Same as REQUIRED                      | Same as REQUIRED                      | Same as REQUIRED              | No                       |
+| **SUPPORTS**     | Maybe                      | If transaction exists → like REQUIRED | If transaction exists → like REQUIRED | Depends on context            | Depends                  |
+*/
+
 @Service
 @RequiredArgsConstructor
 public class InnerTransactionService {
