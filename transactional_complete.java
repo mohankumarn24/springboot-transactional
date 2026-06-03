@@ -584,79 +584,79 @@ public class OrderService {
 /*
 Case 1: RuntimeException occurs and is NOT caught inside method
 
-@Transactional
-public void save() {
-    repo.save(a);
-    throw new RuntimeException("failed");
-}
-
-Result:
-- Transaction rolls back
-- Data is not saved
-- Global exception handler catches exception later
+	@Transactional
+	public void save() {
+	    repo.save(a);
+	    throw new RuntimeException("failed");
+	}
+	
+	Result:
+	- Transaction rolls back
+	- Data is not saved
+	- Global exception handler catches exception later
 */
 
 
 /*
 Case 2: RuntimeException occurs and IS caught inside method
 
-@Transactional
-public void save() {
-    repo.save(a);
-
-    try {
-        throw new RuntimeException("failed");
-    } catch (Exception e) {
-        log.error("error");
-    }
-}
-
-Result:
-- Transaction commits
-- repo.save(a) remains in DB
-- Because exception never went outside method
+	@Transactional
+	public void save() {
+	    repo.save(a);
+	
+	    try {
+	        throw new RuntimeException("failed");
+	    } catch (Exception e) {
+	        log.error("error");
+	    }
+	}
+	
+	Result:
+	- Transaction commits
+	- repo.save(a) remains in DB
+	- Because exception never went outside method
 */
 
 
 /*
 Case 3: RuntimeException occurs, caught and rethrown
 
-@Transactional
-public void save() {
-    repo.save(a);
-
-    try {
-        throw new RuntimeException("failed");
-    } catch (Exception e) {
-        throw e;
-    }
-}
-
-Result:
-- Transaction rolls back
-- Data is not saved
-- Global exception handler catches exception
+	@Transactional
+	public void save() {
+	    repo.save(a);
+	
+	    try {
+	        throw new RuntimeException("failed");
+	    } catch (Exception e) {
+	        throw e;
+	    }
+	}
+	
+	Result:
+	- Transaction rolls back
+	- Data is not saved
+	- Global exception handler catches exception
 */
 
 
 /*
 Case 4: RuntimeException occurs, caught but rollback manually marked
 
-@Transactional
-public void save() {
-    repo.save(a);
-
-    try {
-        throw new RuntimeException("failed");
-    } catch (Exception e) {
-        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-    }
-}
-
-Result:
-- Transaction rolls back
-- Data is not saved
-- Method may still return normally
+	@Transactional
+	public void save() {
+	    repo.save(a);
+	
+	    try {
+	        throw new RuntimeException("failed");
+	    } catch (Exception e) {
+	        TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+	    }
+	}
+	
+	Result:
+	- Transaction rolls back
+	- Data is not saved
+	- Method may still return normally
 */
 
 
@@ -668,3 +668,42 @@ before controller advice / exception handler executes.
 */
 
 //-- What happens to Rollback when we have GlobalExceptionHandler (End) ---//
+
+
+
+
+
+
+
+
+/*
+Case 5a: Checked exception 'SQLException' occurs, but transaction is committed
+
+	@Transactional
+	public void save() throws Exception {
+	    repo.save(a);
+	    throw new SQLException("failed");
+	}
+	
+	
+	Result:
+	    - SQLException is a checked exception.
+	    - Spring DOES NOT roll back by default.
+	    - Transaction COMMITS.
+	    - Data is saved.
+
+
+Case 5b: Checked exception 'SQLException' occurs, and transaction is rolled back using 'rollbackFor'
+
+	@Transactional(rollbackFor = SQLException.class)
+	public void save() throws SQLException {
+	    repo.save(a);
+	    throw new SQLException("failed");
+	}
+	
+	Result:
+	    - SQLException is included in rollbackFor.
+	    - Spring rolls back the transaction.
+	    - Transaction ROLLBACKS.
+	    - Data is NOT saved.
+*/
